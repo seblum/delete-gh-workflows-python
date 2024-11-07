@@ -6,7 +6,6 @@ from pathlib import Path
 
 GITHUB_API_URL = "https://api.github.com"
 
-# Function to get the current repository name from the .git directory
 def get_repo_info():
     """Retrieve repository name from .git configuration."""
     try:
@@ -23,13 +22,22 @@ def get_repo_info():
         return None
 
 def get_gh_token():
-    """Use GitHub CLI to retrieve authentication token (if available)."""
+    """Check if user is logged in with GitHub CLI and retrieve the token."""
     try:
+        # Check if the user is authenticated with GitHub CLI
+        result = subprocess.run(['gh', 'auth', 'status'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # If the user is not authenticated, prompt for login
+        if result.returncode != 0:
+            click.echo("You are not authenticated with GitHub CLI. Initiating login process...")
+            subprocess.run(['gh', 'auth', 'login'], check=True)
+        
+        # Get the auth token (after login)
         result = subprocess.run(['gh', 'auth', 'token'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode == 0:
             return result.stdout.decode('utf-8').strip()
         else:
-            click.echo("You need to be logged in with GitHub CLI ('gh'). Run 'gh auth login'.")
+            click.echo("Failed to retrieve GitHub token.")
             return None
     except FileNotFoundError:
         click.echo("GitHub CLI ('gh') is not installed. Please install it to authenticate.")
@@ -89,49 +97,61 @@ def delete_all_runs(repo, workflow_id, token):
         else:
             click.echo(f"Failed to delete workflow run ID {run_id}.")
 
+def run_fzf_selection(items, prompt="Select an item"):
+    """Run fzf for interactive selection of items and show selected items clearly."""
+    # Prepare input for fzf, each line is an item
+    input_items = "\n".join(items)
+    
+    # Run fzf to select multiple items
+    process = subprocess.Popen(
+        ['fzf', '--multi', '--preview', 'echo {}', '--prompt', prompt],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    
+    # Send the items to fzf via stdin and capture the selected lines
+    output, _ = process.communicate(input=input_items.encode('utf-8'))
+    
+    # Return the selected items as a list
+    return output.decode('utf-8').splitlines()
+
 @click.command()
 def manage_workflow_runs():
     """List and delete GitHub Action workflow runs for the current repository."""
     
+    # Get authentication token from GitHub CLI
     token = get_gh_token()
     if not token:
         click.echo("GitHub token is required. Please login using 'gh auth login' or provide a token.")
         return
 
+    # Get repository info
     repo = get_repo_info()
     if not repo:
         click.echo("Could not determine repository. Ensure you're in a GitHub repo directory.")
         return
 
-    click.echo(f"Fetching workflows for repository '{repo}'...")
+    click.echo(f"\nFetching workflows for repository '{repo}'...")
     workflows = list_workflows(repo, token)
     if not workflows:
         click.echo("No workflows found.")
         return
 
-    # Display list of workflows and let user select one
-    click.echo("\nAvailable Workflows:")
-    for i, (workflow_id, name) in enumerate(workflows, start=1):
-        click.echo(f"{i}: {name} (ID: {workflow_id})")
+    # Add Exit option to the list
+    workflow_choices = [f"{workflow[1]} (ID: {workflow[0]})" for workflow in workflows] + ["Exit"]
+    selected_workflow = run_fzf_selection(workflow_choices, "Select a workflow")
 
-    workflow_index = click.prompt(
-        "\nEnter the number of the workflow to view its runs, or 'q' to quit",
-        type=str
-    )
-
-    if workflow_index.lower() == 'q':
-        click.echo("Exiting.")
+    if not selected_workflow:
+        click.echo("No workflow selected. Exiting.")
         return
 
-    try:
-        workflow_index = int(workflow_index) - 1
-        if workflow_index < 0 or workflow_index >= len(workflows):
-            raise ValueError("Invalid selection.")
-    except ValueError:
-        click.echo("Invalid input. Please enter a valid number.")
+    if "Exit" in selected_workflow:
+        click.echo("Exiting without selecting any workflow.")
         return
 
-    selected_workflow_id, selected_workflow_name = workflows[workflow_index]
+    # Extract selected workflow ID
+    selected_workflow_name = selected_workflow[0]
+    selected_workflow_id = next(w[0] for w in workflows if f"{w[1]} (ID: {w[0]})" == selected_workflow_name)
+
     click.echo(f"\nFetching runs for workflow '{selected_workflow_name}'...")
 
     # List all runs for the selected workflow
@@ -143,43 +163,41 @@ def manage_workflow_runs():
     # Sort runs by name
     runs.sort(key=lambda x: x[1].lower())
 
-    # Adjusted column widths for wider table
-    header_format = "{:<4} {:<35} {:<30} {:<15} {:<15}"
-    click.echo(header_format.format("No.", "Name", "Created At", "Status", "ID"))
-    click.echo("=" * 110)
+    # Display runs with fzf for selection
+    run_choices = [f"{run[1]} - Created: {run[2]} - Status: {run[3]} (ID: {run[0]})" for run in runs] + ["Delete All Runs"]
+    selected_runs = run_fzf_selection(run_choices, "Select workflow runs to delete (use arrows or space for multiple)")
 
-    # Wider columns for better readability
-    row_format = "{:<4} {:<35} {:<30} {:<15} {:<15}"
-    for i, (run_id, name, created_at, status) in enumerate(runs, start=1):
-        click.echo(row_format.format(i, name[:34], created_at, status, run_id))
-
-    delete_choice = click.prompt(
-        "\nDo you want to delete all runs for this workflow? (y/n) or delete specific runs (comma-separated)",
-        type=str
-    )
-
-    if delete_choice.lower() == 'y':
-        click.echo(f"\nDeleting all runs for workflow '{selected_workflow_name}'...")
-        delete_all_runs(repo, selected_workflow_id, token)
-    elif delete_choice.lower() == 'n':
-        click.echo("Exiting without deleting any workflow runs.")
+    if not selected_runs:
+        click.echo("No runs selected. Exiting.")
         return
-    else:
-        try:
-            indices_to_delete = [int(i.strip()) for i in delete_choice.split(",")]
-        except ValueError:
-            click.echo("Invalid input. Please enter valid numbers.")
-            return
 
-        for i in indices_to_delete:
-            if 1 <= i <= len(runs):
-                run_id = runs[i - 1][0]
+    if "Delete All Runs" in selected_runs:
+        click.echo(f"\nYou selected 'Delete All Runs' for workflow '{selected_workflow_name}'.")
+        delete_choice = click.prompt(
+            "Are you sure you want to delete all runs? This action cannot be undone. (y/n)",
+            type=str
+        )
+        if delete_choice.lower() == 'y':
+            delete_all_runs(repo, selected_workflow_id, token)
+        else:
+            click.echo("Exiting without deleting all runs.")
+    else:
+        # Convert the selected run strings back to IDs
+        selected_run_ids = [int(run.split("(ID: ")[1][:-1]) for run in selected_runs]
+
+        delete_choice = click.prompt(
+            "\nDo you want to delete these runs? (y/n)",
+            type=str
+        )
+
+        if delete_choice.lower() == 'y':
+            for run_id in selected_run_ids:
                 if delete_workflow_run(repo, run_id, token):
                     click.echo(f"Deleted workflow run ID {run_id}.")
                 else:
                     click.echo(f"Failed to delete workflow run ID {run_id}.")
-            else:
-                click.echo(f"Invalid selection: {i}. Skipping.")
+        else:
+            click.echo("Exiting without deleting any workflow runs.")
 
 if __name__ == "__main__":
     manage_workflow_runs()
