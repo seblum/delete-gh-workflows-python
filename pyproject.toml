@@ -1,23 +1,25 @@
 [tool.poetry]
-name = "github-actions-workflow-manager"
+name = "workflow-manager"
 version = "0.1.0"
-description = "A CLI tool for managing GitHub Actions workflows."
+description = "A CLI tool to manage GitHub Actions workflows and runs."
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/your-username/github-actions-workflow-manager"
+repository = "https://github.com/yourusername/workflow-manager"
+keywords = ["github", "actions", "workflow", "cli", "automation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-requests = "^2.25.1"
-click = "^8.0.1"
-fzf = "^0.0.1"  # Add any other dependencies here
-
-[tool.poetry.dev-dependencies]
-pytest = "^6.2.2"
+requests = "^2.28"
+click = "^8.0"
 
 [tool.poetry.scripts]
-workflow-manager = "workflow_manager.main:manage_workflow_runs"  # Entry point for the CLI
+workflow-manager = "workflow_manager.manage_workflow_runs:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

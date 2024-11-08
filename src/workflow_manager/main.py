@@ -1,5 +1,3 @@
-# src/main.py
-
 import click
 import os
 import requests
@@ -14,7 +12,6 @@ class GitHubWorkflowManager:
         self.token = self.get_gh_token()
 
     def get_repo_info(self):
-        """Retrieve repository name from .git configuration."""
         try:
             git_path = Path(".git").resolve()
             with open(git_path / "config") as f:
@@ -29,7 +26,6 @@ class GitHubWorkflowManager:
             return None
 
     def get_gh_token(self):
-        """Check if user is logged in with GitHub CLI and retrieve the token."""
         try:
             result = subprocess.run(['gh', 'auth', 'status'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode != 0:
@@ -47,7 +43,6 @@ class GitHubWorkflowManager:
             return None
 
     def list_workflows(self):
-        """List all workflows in the repository."""
         headers = {"Authorization": f"Bearer {self.token}"}
         url = f"{GITHUB_API_URL}/repos/{self.repo}/actions/workflows"
         response = requests.get(url, headers=headers)
@@ -58,7 +53,6 @@ class GitHubWorkflowManager:
         return [(workflow["id"], workflow["name"]) for workflow in workflows]
 
     def list_workflow_runs(self, workflow_id):
-        """List GitHub Actions workflow runs for a specific workflow with pagination."""
         headers = {"Authorization": f"Bearer {self.token}"}
         runs = []
         page = 1
@@ -81,14 +75,12 @@ class GitHubWorkflowManager:
         return runs
 
     def delete_workflow_run(self, run_id):
-        """Delete a specific workflow run."""
         headers = {"Authorization": f"Bearer {self.token}"}
         url = f"{GITHUB_API_URL}/repos/{self.repo}/actions/runs/{run_id}"
         response = requests.delete(url, headers=headers)
         return response.status_code == 204
 
     def delete_all_runs(self, workflow_id):
-        """Delete all workflow runs for a specific workflow."""
         runs = self.list_workflow_runs(workflow_id)
         if not runs:
             click.echo("No workflow runs found for this workflow.")
@@ -101,10 +93,9 @@ class GitHubWorkflowManager:
                 click.echo(f"Failed to delete workflow run ID {run_id}.")
 
     def run_fzf_selection(self, items, prompt="Select an item"):
-        """Run fzf for interactive selection of items and show selected items clearly."""
         input_items = "\n".join(items)
         process = subprocess.Popen(
-            ['fzf', '--multi', '--preview', 'echo {}', '--prompt', prompt],
+            ['fzf', '--multi', '--bind', 'space:toggle', '--preview', 'echo {}', '--prompt', prompt],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         output, _ = process.communicate(input=input_items.encode('utf-8'))
@@ -112,7 +103,6 @@ class GitHubWorkflowManager:
 
 @click.command()
 def manage_workflow_runs():
-    """List and delete GitHub Action workflow runs for the current repository."""
     manager = GitHubWorkflowManager()
     
     if not manager.token:
