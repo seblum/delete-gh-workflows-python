@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/seblum/delete-gh-workflows-python/compare/v0.1.0...v0.1.1) (2024-11-25)
+
+
+### Bug Fixes
+
+* dependencies for ruff ([782bc21](https://github.com/seblum/delete-gh-workflows-python/commit/782bc214ed615b8942665b7fe72864ee69d0fba1))
+
 ## 0.1.0 (2024-11-25)
 
 
