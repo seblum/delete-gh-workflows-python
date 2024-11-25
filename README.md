@@ -1,4 +1,4 @@
-# GitHub Actions Workflow Manager
+# Delete GitHub Actions Workflows
 
 A CLI tool for managing GitHub Actions workflow runs. This tool allows you to list, delete, and manage GitHub Actions workflows from the command line.
 
