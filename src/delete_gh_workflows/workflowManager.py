@@ -1,17 +1,15 @@
-import click
-import os
 import requests
 import subprocess
 from pathlib import Path
-
-GITHUB_API_URL = "https://api.github.com"
+import click
 
 class GitHubWorkflowManager:
-    def __init__(self):
-        self.repo = self.get_repo_info()
-        self.token = self.get_gh_token()
+    def __init__(self,github_api_url:str="https://api.github.com"):
+        self.repo = self.__get_repo_info()
+        self.token = self.__get_gh_token()
+        self.github_api_url = github_api_url
 
-    def get_repo_info(self):
+    def __get_repo_info(self):
         try:
             git_path = Path(".git").resolve()
             with open(git_path / "config") as f:
@@ -25,7 +23,7 @@ class GitHubWorkflowManager:
             click.echo(f"Error retrieving repo info: {e}")
             return None
 
-    def get_gh_token(self):
+    def __get_gh_token(self):
         try:
             result = subprocess.run(['gh', 'auth', 'status'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode != 0:
@@ -44,7 +42,7 @@ class GitHubWorkflowManager:
 
     def list_workflows(self):
         headers = {"Authorization": f"Bearer {self.token}"}
-        url = f"{GITHUB_API_URL}/repos/{self.repo}/actions/workflows"
+        url = f"{self.github_api_url}/repos/{self.repo}/actions/workflows"
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             click.echo(f"Failed to fetch workflows: {response.text}")
@@ -59,7 +57,7 @@ class GitHubWorkflowManager:
         per_page = 100
 
         while True:
-            url = f"{GITHUB_API_URL}/repos/{self.repo}/actions/workflows/{workflow_id}/runs"
+            url = f"{self.github_api_url}/repos/{self.repo}/actions/workflows/{workflow_id}/runs"
             response = requests.get(url, headers=headers, params={"per_page": per_page, "page": page})
             if response.status_code != 200:
                 click.echo(f"Failed to fetch workflow runs: {response.text}")
@@ -76,7 +74,7 @@ class GitHubWorkflowManager:
 
     def delete_workflow_run(self, run_id):
         headers = {"Authorization": f"Bearer {self.token}"}
-        url = f"{GITHUB_API_URL}/repos/{self.repo}/actions/runs/{run_id}"
+        url = f"{self.github_api_url}/repos/{self.repo}/actions/runs/{run_id}"
         response = requests.delete(url, headers=headers)
         return response.status_code == 204
 
@@ -99,65 +97,6 @@ class GitHubWorkflowManager:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         output, _ = process.communicate(input=input_items.encode('utf-8'))
-        return output.decode('utf-8').splitlines()
-
-@click.command()
-def manage_workflow_runs():
-    manager = GitHubWorkflowManager()
-    
-    if not manager.token:
-        click.echo("GitHub token is required. Please login using 'gh auth login' or provide a token.")
-        return
-
-    if not manager.repo:
-        click.echo("Could not determine repository. Ensure you're in a GitHub repo directory.")
-        return
-
-    while True:
-        click.echo(f"\nFetching workflows for repository '{manager.repo}'...")
-        workflows = manager.list_workflows()
-        if not workflows:
-            click.echo("No workflows found.")
-            return
-
-        workflow_choices = [f"{workflow[1]} (ID: {workflow[0]})" for workflow in workflows] + ["Exit"]
-        selected_workflow = manager.run_fzf_selection(workflow_choices, "Select a workflow")
-
-        if "Exit" in selected_workflow:
-            click.echo("Exiting without selecting any workflow.")
-            return
-
-        selected_workflow_name = selected_workflow[0]
-        selected_workflow_id = next(w[0] for w in workflows if f"{w[1]} (ID: {w[0]})" == selected_workflow_name)
-
-        while True:
-            click.echo(f"\nFetching runs for workflow '{selected_workflow_name}'...")
-            runs = manager.list_workflow_runs(selected_workflow_id)
-            if not runs:
-                click.echo("No workflow runs found.")
-                break
-
-            runs.sort(key=lambda x: x[1].lower())
-            run_choices = [f"{run[1]} - Created: {run[2]} - Status: {run[3]} (ID: {run[0]})" for run in runs] + ["Delete All Runs", "Back"]
-            selected_runs = manager.run_fzf_selection(run_choices, "Select workflow runs to delete")
-
-            if "Back" in selected_runs:
-                click.echo("Returning to workflow selection.")
-                break
-
-            if "Delete All Runs" in selected_runs:
-                delete_choice = click.prompt("Delete all runs? (y/n)", type=str)
-                if delete_choice.lower() == 'y':
-                    manager.delete_all_runs(selected_workflow_id)
-            else:
-                selected_run_ids = [int(run.split("(ID: ")[1][:-1]) for run in selected_runs]
-                delete_choice = click.prompt("Delete these runs? (y/n)", type=str)
-                if delete_choice.lower() == 'y':
-                    for run_id in selected_run_ids:
-                        if manager.delete_workflow_run(run_id):
-                            click.echo(f"Deleted workflow run ID {run_id}.")
-                        else:
-                            click.echo(f"Failed to delete workflow run ID {run_id}.")
-
-if __name__ == "__main__":
-    manage_workflow_runs()
+        selected_items = output.decode('utf-8').splitlines()
+        click.echo(f"\n{len(selected_items)} items selected.")  # Feedback on how many were selected
+        return selected_items
