@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "delete-gh-workflows"
-version = "0.1.0"
+version = "0.1.1"
 description = "A CLI tool to manage GitHub Actions workflows and runs."
 authors = ["Sebastian Blum <hello@seblum.me>"]
 license = "MIT"
