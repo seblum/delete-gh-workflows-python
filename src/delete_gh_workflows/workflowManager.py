@@ -4,12 +4,34 @@ from pathlib import Path
 import click
 
 class GitHubWorkflowManager:
-    def __init__(self,github_api_url:str="https://api.github.com"):
+    """
+    A class to manage GitHub Actions workflows and runs via the GitHub API and CLI.
+
+    Attributes:
+        github_api_url (str): The base URL for the GitHub API. Defaults to "https://api.github.com".
+        repo (str): The repository identifier in the format "owner/repo".
+        token (str): The GitHub token used for API authentication.
+    """
+
+    def __init__(self, github_api_url: str = "https://api.github.com"):
+        """
+        Initializes the GitHubWorkflowManager with the API URL, repository information, and GitHub token.
+
+        Args:
+            github_api_url (str): The base URL for the GitHub API. Defaults to "https://api.github.com".
+        """
         self.repo = self.__get_repo_info()
         self.token = self.__get_gh_token()
         self.github_api_url = github_api_url
 
     def __get_repo_info(self):
+        """
+        Retrieves the repository information from the local Git configuration.
+
+        Returns:
+            str: The repository path in the format "owner/repo".
+            None: If the repository information cannot be retrieved.
+        """
         try:
             git_path = Path(".git").resolve()
             with open(git_path / "config") as f:
@@ -24,6 +46,13 @@ class GitHubWorkflowManager:
             return None
 
     def __get_gh_token(self):
+        """
+        Retrieves the GitHub token using the GitHub CLI.
+
+        Returns:
+            str: The GitHub token if successfully retrieved.
+            None: If the token cannot be retrieved or the CLI is not installed.
+        """
         try:
             result = subprocess.run(['gh', 'auth', 'status'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode != 0:
@@ -41,6 +70,14 @@ class GitHubWorkflowManager:
             return None
 
     def list_workflows(self):
+        """
+        Lists all workflows for the current repository.
+
+        Returns:
+            list: A list of tuples containing workflow ID and name.
+                  Example: [(workflow_id, workflow_name), ...]
+            list: An empty list if no workflows are found or if the request fails.
+        """
         headers = {"Authorization": f"Bearer {self.token}"}
         url = f"{self.github_api_url}/repos/{self.repo}/actions/workflows"
         response = requests.get(url, headers=headers)
@@ -51,6 +88,16 @@ class GitHubWorkflowManager:
         return [(workflow["id"], workflow["name"]) for workflow in workflows]
 
     def list_workflow_runs(self, workflow_id):
+        """
+        Lists all runs for a specific workflow.
+
+        Args:
+            workflow_id (int): The ID of the workflow.
+
+        Returns:
+            list: A list of tuples containing run ID, name, creation date, and status.
+                  Example: [(run_id, run_name, created_at, status), ...]
+        """
         headers = {"Authorization": f"Bearer {self.token}"}
         runs = []
         page = 1
@@ -73,12 +120,27 @@ class GitHubWorkflowManager:
         return runs
 
     def delete_workflow_run(self, run_id):
+        """
+        Deletes a specific workflow run.
+
+        Args:
+            run_id (int): The ID of the workflow run to delete.
+
+        Returns:
+            bool: True if the deletion was successful, False otherwise.
+        """
         headers = {"Authorization": f"Bearer {self.token}"}
         url = f"{self.github_api_url}/repos/{self.repo}/actions/runs/{run_id}"
         response = requests.delete(url, headers=headers)
         return response.status_code == 204
 
     def delete_all_runs(self, workflow_id):
+        """
+        Deletes all runs for a specific workflow.
+
+        Args:
+            workflow_id (int): The ID of the workflow for which to delete all runs.
+        """
         runs = self.list_workflow_runs(workflow_id)
         if not runs:
             click.echo("No workflow runs found for this workflow.")
@@ -91,6 +153,16 @@ class GitHubWorkflowManager:
                 click.echo(f"Failed to delete workflow run ID {run_id}.")
 
     def run_fzf_selection(self, items, prompt="Select an item"):
+        """
+        Displays an interactive `fzf` selection menu for the provided items.
+
+        Args:
+            items (list): The list of items to display in the menu.
+            prompt (str): The prompt message to display. Defaults to "Select an item".
+
+        Returns:
+            list: A list of selected items.
+        """
         input_items = "\n".join(items)
         process = subprocess.Popen(
             ['fzf', '--multi', '--bind', 'space:toggle', '--preview', 'echo {}', '--prompt', prompt],
