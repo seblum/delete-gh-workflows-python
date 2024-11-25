@@ -17,5 +17,5 @@ You can install the **GitHub Actions Workflow Manager** in one of two ways:
 You can install the package directly from the GitHub repository by running:
 
 ```bash
-pip install git+https://github.com/seblum/delete-github-workflows-python.git
+pip install git+https://github.com/seblum/delete-gh-workflows-python.git
 ```
